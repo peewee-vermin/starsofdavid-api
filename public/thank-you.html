@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thank you — Stars of David</title>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --gold:#c9a84c;--gold-dim:#8a6f2e;--gold-faint:rgba(201,168,76,0.1);
+    --night:#07080f;--night-2:#0d1020;
+    --text-primary:#f0ede6;--text-secondary:#a89e8a;--text-muted:#5a5650;
+    --border:rgba(201,168,76,0.2);
+  }
+  body{
+    background:var(--night);color:var(--text-primary);
+    font-family:'Inter',sans-serif;font-weight:300;line-height:1.7;
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    padding:2rem;
+  }
+  .card{max-width:560px;width:100%;text-align:center}
+  .magen{margin-bottom:2rem}
+  .star-sym{font-size:3rem;color:var(--gold);display:block;margin-bottom:1.5rem;opacity:0.9}
+  h1{font-family:'EB Garamond',serif;font-size:clamp(1.8rem,5vw,2.6rem);font-weight:400;margin-bottom:1rem}
+  .sub{font-family:'EB Garamond',serif;font-style:italic;color:var(--text-secondary);font-size:1.1rem;margin-bottom:2.5rem}
+  .star-box{border:1px solid var(--border);background:var(--gold-faint);padding:2rem;margin-bottom:2rem}
+  .star-list{display:flex;flex-direction:column;gap:0.8rem}
+  .star-row{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:0.6rem}
+  .star-row:last-child{border-bottom:none;padding-bottom:0}
+  .star-id{font-family:'EB Garamond',serif;font-size:1.1rem;color:var(--gold)}
+  .star-num{font-size:0.7rem;letter-spacing:0.1em;color:var(--text-muted);text-transform:uppercase}
+  .detail-row{display:flex;justify-content:space-between;font-size:0.85rem;padding:0.5rem 0;color:var(--text-secondary)}
+  .detail-label{color:var(--text-muted);letter-spacing:0.05em}
+  .loading{color:var(--text-muted);font-style:italic;font-family:'EB Garamond',serif}
+  .error{color:#d88;font-size:0.9rem;margin-top:1rem}
+  .btn{
+    display:inline-block;font-family:'Inter',sans-serif;font-size:0.78rem;
+    letter-spacing:0.12em;text-transform:uppercase;padding:0.85rem 2.2rem;
+    background:transparent;color:var(--text-secondary);border:1px solid var(--border);
+    text-decoration:none;transition:border-color 0.2s,color 0.2s;
+  }
+  .btn:hover{border-color:var(--gold);color:var(--gold)}
+  .hebrew{font-size:0.75rem;color:var(--text-muted);margin-top:2.5rem}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="magen">
+    <svg width="56" height="56" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="36,6 49,29 23,29" fill="rgba(201,168,76,0.08)" stroke="#c9a84c" stroke-width="1.5"/>
+      <polygon points="36,66 23,43 49,43" fill="rgba(201,168,76,0.08)" stroke="#c9a84c" stroke-width="1.5"/>
+    </svg>
+  </div>
+
+  <span class="star-sym">✦</span>
+  <h1 id="main-heading">Thank you.</h1>
+  <p class="sub" id="sub-heading">Your star has been named.</p>
+
+  <div class="star-box" id="result-box">
+    <p class="loading" id="loading-text">Confirming your dedication…</p>
+  </div>
+
+  <a href="/" class="btn">Return to Stars of David</a>
+
+  <p class="hebrew">זִכְרוֹן לְבָרָכָה &nbsp;·&nbsp; May their memory be a blessing</p>
+</div>
+
+<script>
+const API_BASE_URL = window.STARS_API_URL || 'http://localhost:3001';
+
+function fmt(n) { return new Intl.NumberFormat('en-US').format(n); }
+
+async function confirmDonation() {
+  const params = new URLSearchParams(window.location.search);
+  const sessionId = params.get('session_id');
+  const box = document.getElementById('result-box');
+  const subHeading = document.getElementById('sub-heading');
+
+  if (!sessionId) {
+    box.innerHTML = '<p class="error">No session reference found. If you completed a payment, check your email for confirmation.</p>';
+    return;
+  }
+
+  // Poll briefly — the webhook may take a moment to process after redirect
+  let attempts = 0;
+  const maxAttempts = 8;
+
+  async function poll() {
+    attempts++;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/donations/session/${sessionId}`);
+      if (!res.ok) throw new Error('not found yet');
+      const data = await res.json();
+
+      if (data.status === 'completed' && data.star_ids && data.star_ids[0]) {
+        renderSuccess(data);
+        return;
+      }
+      if (attempts < maxAttempts) {
+        setTimeout(poll, 1500);
+      } else {
+        box.innerHTML = '<p class="loading">Your payment was received and is being finalized. Your certificate will arrive by email shortly.</p>';
+      }
+    } catch (err) {
+      if (attempts < maxAttempts) {
+        setTimeout(poll, 1500);
+      } else {
+        box.innerHTML = '<p class="error">We could not confirm your dedication automatically, but if payment succeeded, you will receive a confirmation email shortly.</p>';
+      }
+    }
+  }
+
+  poll();
+
+  function renderSuccess(data) {
+    subHeading.textContent = data.star_count === 1
+      ? 'One star has been named in eternal memory.'
+      : `${data.star_count} stars have been named in eternal memory.`;
+
+    const starsHtml = data.star_ids.map((id, i) => `
+      <div class="star-row">
+        <span class="star-id">✦ ${id}</span>
+        <span class="star-num">Star ${i + 1} of ${data.star_count}</span>
+      </div>
+    `).join('');
+
+    box.innerHTML = `
+      <div class="star-list">${starsHtml}</div>
+      <div style="border-top:1px solid var(--border);margin-top:1.2rem;padding-top:1.2rem">
+        <div class="detail-row"><span class="detail-label">Dedicated by</span><span>${data.donor_name || '—'}</span></div>
+        ${data.dedication_message ? `<div class="detail-row"><span class="detail-label">Message</span><span style="font-style:italic">"${data.dedication_message}"</span></div>` : ''}
+        <div class="detail-row"><span class="detail-label">Total</span><span style="color:var(--gold)">$${(data.amount_cents / 100).toFixed(2)}</span></div>
+      </div>
+      ${data.certificate_url
+        ? `<a href="${data.certificate_url}" target="_blank" class="btn" style="margin-top:1.5rem;display:inline-block;border-color:var(--gold);color:var(--gold)">Download Certificate</a>`
+        : `<p style="font-size:0.8rem;color:var(--text-muted);margin-top:1.5rem;font-style:italic">Your certificate is being prepared and will arrive by email shortly.</p>`
+      }
+    `;
+  }
+}
+
+confirmDonation();
+</script>
+</body>
+</html>
